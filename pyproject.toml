@@ -1,0 +1,21 @@
+[project]
+name = "greenhouse-harvest-connector"
+version = "0.1.0"
+description = "Pull Greenhouse Harvest v3 data into Redshift or Google Sheets."
+requires-python = ">=3.11"
+dependencies = [
+  "gspread>=6.1.0",
+  "google-auth>=2.29.0",
+  "redshift-connector>=2.1.0",
+  "requests>=2.32.0",
+]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
