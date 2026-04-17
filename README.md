@@ -145,6 +145,51 @@ python -m greenhouse_harvest_connector.orchestrate \
   --filter jobs.status=open
 ```
 
+### Ingest the full built-in endpoint catalog
+
+```bash
+python -m greenhouse_harvest_connector.orchestrate \
+  --all-endpoints \
+  --load-mode upsert
+```
+
+By default this continues past endpoint-level failures and prints a summary at the end. That is useful because some endpoints may require extra scopes, Site Admin access, or a tenant feature your Greenhouse account does not use.
+
+The current built-in catalog is:
+
+- `application_stages`
+- `applications`
+- `approvers`
+- `attachments`
+- `candidate_educations`
+- `candidate_employments`
+- `candidates`
+- `custom_field_options`
+- `custom_fields`
+- `default_interviewers`
+- `demographic_answer_options`
+- `departments`
+- `interviews`
+- `job_posts`
+- `jobs`
+- `offers`
+- `offices`
+- `openings`
+- `prospective_jobs`
+- `referrers`
+- `scorecards`
+- `sources`
+- `tracking_links`
+- `users`
+
+If you want the run to stop on the first failure:
+
+```bash
+python -m greenhouse_harvest_connector.orchestrate \
+  --all-endpoints \
+  --no-continue-on-error
+```
+
 ## Redshift storage pattern
 
 This starter stores:
@@ -255,6 +300,12 @@ These are usually the first ones to ingest for recruiting analytics:
 - `users`
 - `departments`
 - `offices`
+
+## Notes on "all endpoints"
+
+This project now supports ingesting the full built-in catalog of known top-level Harvest v3 list endpoints. It does not try to auto-discover nested or path-parameter endpoints because those are not generically callable as a simple `GET /v3/<endpoint>`.
+
+This catalog was updated against Greenhouse Harvest docs available on April 17, 2026, including the current list endpoint guidance and v3 reference pages.
 
 ## Next improvements
 

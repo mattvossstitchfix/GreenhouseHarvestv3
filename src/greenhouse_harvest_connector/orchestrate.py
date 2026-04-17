@@ -4,11 +4,9 @@ import argparse
 from typing import Any
 
 from .config import GreenhouseConfig, RedshiftConfig
+from .endpoints import ALL_KNOWN_LIST_ENDPOINTS, SMOKE_TEST_ENDPOINTS
 from .harvest import HarvestClient
 from .sinks import RedshiftSink
-
-
-DEFAULT_ENDPOINTS = ["applications", "jobs", "candidates"]
 
 
 def _parse_filter_group(values: list[str]) -> dict[str, dict[str, Any]]:
@@ -31,8 +29,13 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--endpoints",
         nargs="+",
-        default=DEFAULT_ENDPOINTS,
-        help="Endpoints to load. Defaults to applications jobs candidates.",
+        default=SMOKE_TEST_ENDPOINTS,
+        help="Endpoints to load. Defaults to a small smoke-test set.",
+    )
+    parser.add_argument(
+        "--all-endpoints",
+        action="store_true",
+        help="Load the full built-in catalog of known top-level Harvest v3 list endpoints.",
     )
     parser.add_argument(
         "--load-mode",
@@ -57,6 +60,12 @@ def build_parser() -> argparse.ArgumentParser:
         default="",
         help="Optional prefix for output tables, e.g. raw_ gives raw_applications.",
     )
+    parser.add_argument(
+        "--continue-on-error",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Keep going when one endpoint fails. Enabled by default.",
+    )
     return parser
 
 
@@ -69,29 +78,44 @@ def main() -> None:
     client = HarvestClient(greenhouse_config)
     sink = RedshiftSink(redshift_config)
     filters_by_endpoint = _parse_filter_group(args.filter)
+    endpoints = ALL_KNOWN_LIST_ENDPOINTS if args.all_endpoints else args.endpoints
 
     total_records = 0
-    for endpoint in args.endpoints:
+    failures: list[tuple[str, str]] = []
+    for endpoint in endpoints:
         endpoint_filters = filters_by_endpoint.get(endpoint, {})
-        records = client.fetch_endpoint(
-            endpoint=endpoint,
-            params=endpoint_filters,
-            limit=args.limit,
-        )
-        extracted_at = client.extraction_timestamp()
-        table_name = f"{args.table_prefix}{endpoint.replace('/', '_')}_raw"
+        try:
+            records = client.fetch_endpoint(
+                endpoint=endpoint,
+                params=endpoint_filters,
+                limit=args.limit,
+            )
+            extracted_at = client.extraction_timestamp()
+            table_name = f"{args.table_prefix}{endpoint.replace('/', '_')}_raw"
 
-        sink.write(
-            table_name=table_name,
-            records=records,
-            extracted_at=extracted_at,
-            endpoint=endpoint,
-            load_mode=args.load_mode,
-        )
-        total_records += len(records)
-        print(f"Wrote {len(records)} records from '{endpoint}' to redshift table '{table_name}'.")
+            sink.write(
+                table_name=table_name,
+                records=records,
+                extracted_at=extracted_at,
+                endpoint=endpoint,
+                load_mode=args.load_mode,
+            )
+            total_records += len(records)
+            print(f"Wrote {len(records)} records from '{endpoint}' to redshift table '{table_name}'.")
+        except Exception as exc:
+            failures.append((endpoint, str(exc)))
+            print(f"Failed endpoint '{endpoint}': {exc}")
+            if not args.continue_on_error:
+                raise
 
-    print(f"Completed Redshift orchestration for {len(args.endpoints)} endpoint(s), {total_records} record(s) total.")
+    print(
+        f"Completed Redshift orchestration for {len(endpoints)} endpoint(s), "
+        f"{total_records} record(s) total, {len(failures)} failure(s)."
+    )
+    if failures:
+        print("Failed endpoints:")
+        for endpoint, message in failures:
+            print(f" - {endpoint}: {message}")
 
 
 if __name__ == "__main__":
